@@ -1,85 +1,108 @@
-# 📚 Assistente de Q&A em Documentos com RAG e Gemini
+# Document Q&A Pipeline (RAG) with LangChain & Gemini
 
-Este repositório contém a implementação de um pipeline de **Retrieval-Augmented Generation (RAG)** em Python utilizando **LangChain**, **ChromaDB** e a API do **Google Gemini**.
-
-O sistema permite indexar documentos em formato PDF e realizar consultas contextuais em linguagem natural, garantindo respostas fundamentadas e com prevenção de alucinações.
+A lightweight, context-aware Retrieval-Augmented Generation (RAG) pipeline designed for question-answering over PDF documents. Built with LangChain, ChromaDB, and Google Gemini, this project extracts text from local documents, indexes them into a vector space, and generates strictly grounded responses to minimize hallucinations.
 
 ---
 
-## 🏗️ Arquitetura do Sistema
+## Architecture & Data Flow
 
-```
-[PDF (Documento)]
-       │
-       ▼
-[Chunking Recursivo (1000 chars / 200 overlap)]
-       │
-       ▼
-[Embeddings Vetoriais (gemini-embedding-001)]
-       │
-       ▼
-[Vector Store Local (ChromaDB)]
-       │
-       ▼ (Busca por Similaridade Semântica)
-[Contexto Relevante (Top-K) + Pergunta]
-       │
-       ▼
-[LLM (Gemini 3.8 Flash)] ➔ Resposta Fundamentada
+```mermaid
+flowchart LR
+    A[PDF Document] --> B[PyPDFLoader]
+    B --> C[Recursive Text Splitter\nchunk: 1000 | overlap: 200]
+    C --> D[gemini-embedding-001]
+    D --> E[(ChromaDB Vector Store)]
+    
+    Q[User Query] --> F[Similarity Retriever\nk=3]
+    E --> F
+    F --> G[Context-Grounded Prompt]
+    Q --> G
+    G --> H[gemini-3.8-flash\ntemp=0.2]
+    H --> I[StrOutputParser]
+    I --> J[Terminal Response]
 ```
 
 ---
 
-## 🛠️ Tecnologias Utilizadas
+## Technical Design Decisions
 
-- **Linguagem:** Python 3.11+
-- **Orquestração de LLMs:** LangChain (LCEL)
-- **Banco Vetorial:** ChromaDB
-- **Embeddings:** `gemini-embedding-001` (Google GenAI)
-- **Modelo de Linguagem:** `gemini-3.8-flash`
-- **Manipulação de PDFs:** PyPDF
+- **Recursive Text Splitting:** Uses `RecursiveCharacterTextSplitter` with double-newlines, single-newlines, and spaces as hierarchical delimiters. This preserves paragraph and sentence boundaries, avoiding fragmented clauses that distort semantic embeddings.
+- **Overlap Window (200 characters):** Guarantees continuity across chunk boundaries so cross-sentence concepts are not split between adjacent vectors.
+- **Vector Indexing (`gemini-embedding-001`):** Generates dense vector representations optimized for semantic similarity and information retrieval tasks.
+- **Hallucination Suppression via Prompt Grounding:** The system prompt constrains the LLM to only answer from the provided context. If evidence is absent, the model explicitly acknowledges the lack of information rather than inferring facts.
+- **Declarative Pipeline (LCEL):** Implemented using LangChain Expression Language (`RunnablePassthrough`, pipes `|`), enabling modular testing and zero-friction model swapping.
 
 ---
 
-## ⚙️ Como Executar o Projeto
+## Repository Structure
 
-### 1. Clonar o repositório e acessar a pasta
+```text
+├── .env.example          # Sample configuration file for environment variables
+├── .gitignore            # Excludes secrets (.env), caches, and virtual environments
+├── rag_basico.py         # Main pipeline script (ingestion, indexing, retrieval, generation)
+├── requirements.txt      # Pinned project dependencies
+└── README.md             # Project documentation
+```
+
+---
+
+## Quickstart
+
+### Prerequisites
+
+- Python 3.11+
+- A Google AI Studio API key ([Get an API key](https://aistudio.google.com/))
+
+### 1. Clone & Set Up Virtual Environment
+
 ```bash
 git clone https://github.com/GilsonCataoDev/rag-documentos-gemini.git
 cd rag-documentos-gemini
-```
 
-### 2. Criar e ativar o ambiente virtual
-```bash
-# Windows
 python -m venv venv
+# Windows (PowerShell)
 .\venv\Scripts\Activate.ps1
-
-# Linux / Mac
-python3 -m venv venv
+# Linux/macOS
 source venv/bin/activate
 ```
 
-### 3. Instalar as dependências
+### 2. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Configurar as variáveis de ambiente
-Crie um arquivo `.env` baseado no `.env.example`:
-```env
-GEMINI_API_KEY="SUA_CHAVE_AQUI"
+### 3. Configure Secrets
+
+Copy `.env.example` to `.env` and insert your Gemini API key:
+
+```bash
+cp .env.example .env
 ```
 
-### 5. Executar a aplicação
-Coloque seu documento PDF na pasta com o nome `documento.pdf` e execute:
+```env
+GEMINI_API_KEY="your_actual_api_key_here"
+```
+
+### 4. Run the Pipeline
+
+Place any target PDF in the root directory named `documento.pdf` and execute:
+
 ```bash
 python rag_basico.py
 ```
 
 ---
 
-## 💡 Decisões Técnicas e Aprendizados
+## Future Roadmap
 
-- **Text Splitting Recursivo:** Utilização do `RecursiveCharacterTextSplitter` para garantir cortes semânticos em parágrafos e frases, evitando perda de contexto nas bordas dos blocos.
-- **Grounding e Prevenção de Alucinação:** Configuração estrita de prompt instruindo o modelo a responder exclusivamente com base nos trechos recuperados.
-- **Arquitetura Desacoplada:** Código estruturado com LangChain Expression Language (LCEL), facilitando a troca futura de provedor de LLM ou de banco vetorial.
+- [ ] Add persistent on-disk vector storage with ChromaDB to bypass re-indexing on successive runs.
+- [ ] Implement re-ranking (e.g., Cohere Rerank or BGE Reranker) to optimize top-k precision.
+- [ ] Integrate automated evaluation benchmarks using RAGAS (faithfulness, answer relevance, context recall).
+- [ ] Expose the retrieval chain via a FastAPI endpoint and a lightweight Streamlit interface.
+
+---
+
+## License
+
+MIT
